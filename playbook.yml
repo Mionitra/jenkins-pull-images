@@ -8,7 +8,7 @@
   gather_facts: false
 
   vars:
-    light_images:
+    docker_images:
       - "busybox:latest"       # ~1 MB
       - "alpine:latest"        # ~7 MB
       - "alpine:3.18"          # ~7 MB
@@ -19,7 +19,7 @@
 
     - name: Pull each image
       command: docker pull {{ item }}
-      loop: "{{ light_images }}"
+      loop: "{{ docker_images }}"
       register: pull_output
       ignore_errors: true
 
