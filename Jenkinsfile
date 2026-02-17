@@ -9,7 +9,7 @@ pipeline {
     agent any
 
     environment {
-        PLAYBOOK   = 'pull_lightest_images.yml'
+        PLAYBOOK   = 'playbook.yml'
         GIT_BRANCH = 'main'
     }
 
@@ -43,7 +43,7 @@ pipeline {
                         git config user.email "jenkins@ci.local"
                         git config user.name  "Jenkins CI"
 
-                        git add pull_lightest_images.yml
+                        git add playbook.yml
 
                         if git diff --cached --quiet; then
                             echo "Nothing changed, skipping push."
