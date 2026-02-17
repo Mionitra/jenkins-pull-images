@@ -20,7 +20,7 @@ pipeline {
 
         stage('Run Playbook') {
             steps {
-                sh 'ansible-playbook ${PLAYBOOK}'  // Execute your playbook
+                sh '/usr/bin/ansible-playbook ${PLAYBOOK}'  // Execute your playbook
             }
         }
     }
