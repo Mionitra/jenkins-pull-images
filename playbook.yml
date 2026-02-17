@@ -1,0 +1,133 @@
+---
+# pull_lightest_images.yml
+# Pulls the 5 lightest Docker images from Docker Hub and saves a report
+# Usage: ansible-playbook pull_lightest_images.yml
+#        ansible-playbook pull_lightest_images.yml -e "docker_registry=myregistry.io"
+
+- name: Pull 5 Lightest Docker Images
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # ---------------------------------------------------------------
+    # Define your candidate images here (name + tag).
+    # The playbook will pull each, check its size, sort ascending,
+    # keep the 5 smallest, and write a JSON report.
+    # ---------------------------------------------------------------
+    candidate_images:
+      - "alpine:latest"
+      - "busybox:latest"
+      - "scratch:latest"
+      - "debian:slim"
+      - "ubuntu:22.04"
+      - "python:3.12-alpine"
+      - "node:20-alpine"
+      - "nginx:alpine"
+      - "redis:alpine"
+      - "golang:alpine"
+
+    # Where to write the output report
+    output_report: "./docker_image_report.json"
+
+    # Optional: login credentials (leave blank to skip login)
+    docker_registry: "docker.io"
+    docker_username: ""
+    docker_password: ""
+
+  tasks:
+
+    # ---------------------------------------------------------------
+    # 0. Optional Docker Hub login
+    # ---------------------------------------------------------------
+    - name: Log in to Docker registry
+      community.docker.docker_login:
+        registry_url: "{{ docker_registry }}"
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+      when:
+        - docker_username | length > 0
+        - docker_password | length > 0
+      no_log: true
+
+    # ---------------------------------------------------------------
+    # 1. Pull all candidate images (loop)
+    # ---------------------------------------------------------------
+    - name: Pull candidate Docker images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: true
+      loop: "{{ candidate_images }}"
+      register: pull_results
+      ignore_errors: true   # skip images that fail (e.g. private/unavailable)
+
+    # ---------------------------------------------------------------
+    # 2. Inspect each pulled image to get its size
+    # ---------------------------------------------------------------
+    - name: Inspect each image to retrieve size
+      community.docker.docker_image_info:
+        name: "{{ item }}"
+      loop: "{{ candidate_images }}"
+      register: image_info_results
+      ignore_errors: true
+
+    # ---------------------------------------------------------------
+    # 3. Build a flat list: [ { name, size_mb }, ... ]
+    # ---------------------------------------------------------------
+    - name: Build image size list
+      set_fact:
+        image_sizes: >-
+          {{
+            image_sizes | default([]) + [{
+              'name': item.item,
+              'size_bytes': (item.images[0].Size | default(0)) | int,
+              'size_mb': ((item.images[0].Size | default(0)) | int / 1048576) | round(2)
+            }]
+          }}
+      loop: "{{ image_info_results.results }}"
+      when: item.images | default([]) | length > 0
+
+    # ---------------------------------------------------------------
+    # 4. Sort by size ascending and slice the 5 lightest
+    # ---------------------------------------------------------------
+    - name: Sort images by size and select the 5 lightest
+      set_fact:
+        lightest_5: "{{ image_sizes | sort(attribute='size_bytes') | list | slice_head(5) }}"
+      vars:
+        # Custom filter workaround — we slice with a combination of
+        # selectattr + list, safe for all Ansible 2.9+ versions
+        all_sorted: "{{ image_sizes | sort(attribute='size_bytes') | list }}"
+        lightest_5: "{{ all_sorted[:5] }}"
+
+    # ---------------------------------------------------------------
+    # 5. Display results in the Ansible output
+    # ---------------------------------------------------------------
+    - name: Show the 5 lightest images
+      debug:
+        msg: "{{ idx + 1 }}. {{ item.name }} — {{ item.size_mb }} MB"
+      loop: "{{ lightest_5 }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }}"
+
+    # ---------------------------------------------------------------
+    # 6. Write JSON report to disk (this file gets pushed to Git)
+    # ---------------------------------------------------------------
+    - name: Write JSON report
+      copy:
+        content: >-
+          {{
+            {
+              'generated_at': lookup('pipe', 'date -u +"%Y-%m-%dT%H:%M:%SZ"'),
+              'total_candidates': candidate_images | length,
+              'lightest_5': lightest_5,
+              'all_images_sorted': image_sizes | sort(attribute='size_bytes') | list
+            } | to_nice_json
+          }}
+        dest: "{{ output_report }}"
+      delegate_to: localhost
+
+    - name: Report saved
+      debug:
+        msg: "Report written to {{ output_report }}"
