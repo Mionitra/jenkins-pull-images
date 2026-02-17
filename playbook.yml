@@ -14,7 +14,7 @@
       - "alpine:3.18"          # ~7 MB
       - "debian:slim"          # ~30 MB
       - "nginx:alpine"         # ~42 MB
-
+    ignore_errors: true
   tasks:
 
     - name: Pull each image
