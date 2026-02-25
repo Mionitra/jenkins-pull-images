@@ -1,6 +1,6 @@
 ---
 # pull_lightest_images.yml
-# Pulls 5 of the lightest known Docker images from Docker Hub
+# Pulls 5 Docker images from Docker Hub
 
 - name: Pull 5 Lightest Docker Images
   hosts: localhost
